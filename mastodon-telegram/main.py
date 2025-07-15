@@ -9,7 +9,7 @@ import sqlite3
 import asyncio
 import re
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from mastodon import Mastodon
 from mastodon.types_base import PaginatableList
 from mastodon.return_types import Status
@@ -230,7 +230,9 @@ async def main(last_synced_post_time=None, run_once=False):
         if run_once:
             # Output the latest post time for GitHub Actions
             if latest_post_time:
-                print(f"LAST_SYNCED_POST_TIME={latest_post_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                # Round up to the next second to ensure we don't miss posts
+                rounded_time = latest_post_time.replace(microsecond=0) + timedelta(seconds=1)
+                print(f"LAST_SYNCED_POST_TIME={rounded_time.strftime('%Y-%m-%d %H:%M:%S')}")
             else:
                 print(f"LAST_SYNCED_POST_TIME={last_synced_post_time.strftime('%Y-%m-%d %H:%M:%S') if last_synced_post_time else '2000-01-01 12:00:00'}")
             break
