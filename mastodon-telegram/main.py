@@ -9,7 +9,7 @@ import sqlite3
 import asyncio
 import re
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from mastodon import Mastodon
 from mastodon.types_base import PaginatableList
 from mastodon.return_types import Status
@@ -139,7 +139,7 @@ def is_post_synced(post_id):
     conn.close()
     return exists
 
-async def main(last_synced_post_time=None):
+async def main(last_synced_post_time=None, run_once=False):
     """Main function to run the bot."""
     print("Starting Mastodon-to-Telegram Bridge...")
 
@@ -159,6 +159,9 @@ async def main(last_synced_post_time=None):
     # and then only process those not already in DB.
     # After the first run, since_id will be the latest post ID from the DB.
     since_id = None # We will rely on is_post_synced for filtering
+    
+    # Track the latest post time for GitHub Actions
+    latest_post_time = last_synced_post_time
 
     if last_synced_post_time:
         print(f"Starting bot. Will only sync posts created after: {last_synced_post_time}")
@@ -202,14 +205,18 @@ async def main(last_synced_post_time=None):
                         # Using HTML for better formatting
                         message_text = f"<b>New Post from {post['account']['display_name']}</b>\n\n"
                         message_text += cleaned_content
-                        message_text += f"\n\n<a href='{post['url']}'>View on Mastodon</a>"
+                        message_text += f"\n\n<a href='{post.url}'>View on Mastodon</a>"
 
                         # Send to all channels
-                        # await send_to_all_channels(bot, message_text, post['media_attachments'])
+                        await send_to_all_channels(bot, message_text, post.media_attachments)
 
                         # Insert the post ID into the database after successful sending
                         insert_synced_post_id(post_id)
                         print(f"Sent post {post_id} to all Telegram channels and recorded in DB.")
+                        
+                        # Update the latest post time for GitHub Actions
+                        if not latest_post_time or post_date > latest_post_time:
+                            latest_post_time = post_date
                     else:
                         print(f"Post {post_id} already synced. Skipping.")
 
@@ -218,6 +225,15 @@ async def main(last_synced_post_time=None):
 
         except Exception as e:
             print(f"An error occurred: {e}")
+
+        # If run_once is True, exit after one iteration
+        if run_once:
+            # Output the latest post time for GitHub Actions
+            if latest_post_time:
+                print(f"LAST_SYNCED_POST_TIME={latest_post_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                print(f"LAST_SYNCED_POST_TIME={last_synced_post_time.strftime('%Y-%m-%d %H:%M:%S') if last_synced_post_time else '2000-01-01 12:00:00'}")
+            break
 
         print(f"Sleeping for {POLLING_INTERVAL} seconds...")
         time.sleep(POLLING_INTERVAL)
@@ -232,16 +248,23 @@ if __name__ == '__main__':
         type=str,
         help='Only sync posts created after this time (format: YYYY-MM-DD HH:MM:SS)'
     )
+    parser.add_argument(
+        '--run-once',
+        action='store_true',
+        help='Run once and exit (useful for GitHub Actions)'
+    )
     
     args = parser.parse_args()
     
     # Parse the datetime if provided
-    last_synced_post_time = "2000-01-01 12:00:00"
+    last_synced_post_time = "2000-01-01 12:00:00"  # Default value if not provided
     if args.last_synced_post_time:
         try:
-            last_synced_post_time = datetime.strptime(args.last_synced_post_time, '%Y-%m-%d %H:%M:%S')
+            # Parse the datetime and make it timezone-aware (UTC)
+            parsed_time = datetime.strptime(args.last_synced_post_time, '%Y-%m-%d %H:%M:%S')
+            last_synced_post_time = parsed_time.replace(tzinfo=timezone.utc)
         except ValueError:
             print(f"Error: Invalid datetime format. Please use YYYY-MM-DD HH:MM:SS")
             exit(1)
     
-    asyncio.run(main(last_synced_post_time))
+    asyncio.run(main(last_synced_post_time, args.run_once))

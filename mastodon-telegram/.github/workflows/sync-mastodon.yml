@@ -1,0 +1,64 @@
+name: Sync Mastodon to Telegram
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      
+    - name: Install dependencies
+      run: uv sync
+      
+    - name: Run sync script
+      id: sync
+      env:
+        MASTODON_USER_ID: ${{ secrets.MASTODON_USER_ID }}
+        MASTODON_INSTANCE_URL: ${{ secrets.MASTODON_INSTANCE_URL }}
+        MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHANNEL_IDS: ${{ secrets.TELEGRAM_CHANNEL_IDS }}
+        POLLING_INTERVAL: 60 # Run once in GitHub Actions
+      run: |
+        LAST_UPDATED="${{ secrets.LAST_UPDATED }}"
+        if [ -z "$LAST_UPDATED" ]; then
+          LAST_UPDATED="2000-01-01 12:00:00"
+        fi
+        
+        # Run the sync script with the last updated time
+        OUTPUT=$(uv run main.py --last-synced-post-time "$LAST_UPDATED" --run-once)
+        echo "$OUTPUT"
+        
+        # Extract the timestamp from the output
+        NEW_TIMESTAMP=$(echo "$OUTPUT" | grep "LAST_SYNCED_POST_TIME=" | cut -d'=' -f2)
+        
+        if [ -n "$NEW_TIMESTAMP" ]; then
+          echo "New timestamp: $NEW_TIMESTAMP"
+          echo "new_timestamp=$NEW_TIMESTAMP" >> $GITHUB_OUTPUT
+        else
+          echo "No new timestamp found, using previous value"
+          echo "new_timestamp=$LAST_UPDATED" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Update LAST_UPDATED secret
+      if: steps.sync.outputs.new_timestamp != ''
+      uses: gliech/create-github-secret-action@v1
+      with:
+        name: LAST_UPDATED
+        value: ${{ steps.sync.outputs.new_timestamp }}
+        pa_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
