@@ -8,7 +8,11 @@ import time
 import sqlite3
 import asyncio
 import re
+import argparse
+from datetime import datetime
 from mastodon import Mastodon
+from mastodon.types_base import PaginatableList
+from mastodon.return_types import Status
 from telegram import Bot
 from dotenv import load_dotenv
 
@@ -135,7 +139,7 @@ def is_post_synced(post_id):
     conn.close()
     return exists
 
-async def main():
+async def main(last_synced_post_time=None):
     """Main function to run the bot."""
     print("Starting Mastodon-to-Telegram Bridge...")
 
@@ -156,7 +160,10 @@ async def main():
     # After the first run, since_id will be the latest post ID from the DB.
     since_id = None # We will rely on is_post_synced for filtering
 
-    print(f"Starting bot. Will check for new posts and filter out already synced ones.")
+    if last_synced_post_time:
+        print(f"Starting bot. Will only sync posts created after: {last_synced_post_time}")
+    else:
+        print(f"Starting bot. Will check for new posts and filter out already synced ones.")
 
     while True:
         try:
@@ -166,17 +173,25 @@ async def main():
             # We only want original posts, not boosts/replies
             # We fetch without since_id initially to get all recent posts,
             # then filter using the database.
-            new_posts = mastodon.account_statuses(
+            new_posts: PaginatableList[Status] = mastodon.account_statuses(
                 id=MASTODON_USER_ID,  # type: ignore
-                exclude_reblogs=True,
-                exclude_replies=True,
+                # exclude_reblogs=True,
+                # exclude_replies=True,
                 limit=20 # Fetch a reasonable number of recent posts
             )
 
             if new_posts:
                 # The API returns posts in reverse chronological order, so we reverse them back
                 for post in reversed(new_posts):
-                    post_id = post['id']
+                    post_id = post.id
+                    post_date = post.created_at
+                    print(f"Processing post {post_id} created at {post_date}...")
+                    
+                    # Check if post was created after the specified time
+                    if last_synced_post_time and post_date <= last_synced_post_time:
+                        print(f"Post {post_id} was created before the specified time. Skipping.")
+                        continue
+                    
                     if not is_post_synced(post_id):
                         print(f"Found new post: {post_id}")
                         
@@ -190,7 +205,7 @@ async def main():
                         message_text += f"\n\n<a href='{post['url']}'>View on Mastodon</a>"
 
                         # Send to all channels
-                        await send_to_all_channels(bot, message_text, post['media_attachments'])
+                        # await send_to_all_channels(bot, message_text, post['media_attachments'])
 
                         # Insert the post ID into the database after successful sending
                         insert_synced_post_id(post_id)
@@ -209,4 +224,24 @@ async def main():
 
 if __name__ == '__main__':
     import asyncio
-    asyncio.run(main())
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Mastodon to Telegram Bridge')
+    parser.add_argument(
+        '--last-synced-post-time',
+        type=str,
+        help='Only sync posts created after this time (format: YYYY-MM-DD HH:MM:SS)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Parse the datetime if provided
+    last_synced_post_time = "2000-01-01 12:00:00"
+    if args.last_synced_post_time:
+        try:
+            last_synced_post_time = datetime.strptime(args.last_synced_post_time, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            print(f"Error: Invalid datetime format. Please use YYYY-MM-DD HH:MM:SS")
+            exit(1)
+    
+    asyncio.run(main(last_synced_post_time))
