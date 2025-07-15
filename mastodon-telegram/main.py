@@ -189,10 +189,12 @@ async def main(last_synced_post_time=None, run_once=False):
                     post_id = post.id
                     post_date = post.created_at
                     print(f"Processing post {post_id} created at {post_date}...")
+                    if last_synced_post_time:
+                        print(f"Checking against last synced post time: {last_synced_post_time}")
                     
                     # Check if post was created after the specified time
                     if last_synced_post_time and post_date <= last_synced_post_time:
-                        print(f"Post {post_id} was created before the specified time. Skipping.")
+                        print(f"Post {post_id} was created before the specified time . Skipping.")
                         continue
                     
                     if not is_post_synced(post_id):
