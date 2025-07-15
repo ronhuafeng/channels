@@ -257,7 +257,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # Parse the datetime if provided
-    last_synced_post_time = "2000-01-01 12:00:00"  # Default value if not provided
+    last_synced_post_time = None  # Default value if not provided
     if args.last_synced_post_time:
         try:
             # Parse the datetime and make it timezone-aware (UTC)

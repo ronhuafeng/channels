@@ -23,10 +23,12 @@ jobs:
       uses: astral-sh/setup-uv@v3
       
     - name: Install dependencies
+      working-directory: ./mastodon-telegram
       run: uv sync
       
     - name: Run sync script
       id: sync
+      working-directory: ./mastodon-telegram
       env:
         MASTODON_USER_ID: ${{ secrets.MASTODON_USER_ID }}
         MASTODON_INSTANCE_URL: ${{ secrets.MASTODON_INSTANCE_URL }}
