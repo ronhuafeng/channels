@@ -34,6 +34,8 @@ POLLING_INTERVAL = int(os.getenv('POLLING_INTERVAL', '300')) # 5 minutes
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_NAME = os.getenv('DATABASE_NAME', os.path.join(SCRIPT_DIR, 'synced_posts.db'))
 
+DEBUG= os.getenv('DEBUG', 'false').lower() in ('true', '1', 'yes')
+
 # Validate required environment variables
 def validate_config():
     """Validate that all required environment variables are set."""
@@ -164,13 +166,14 @@ async def main(last_synced_post_time=None, run_once=False):
     latest_post_time = last_synced_post_time
 
     if last_synced_post_time:
-        print(f"Starting bot. Will only sync posts created after: {last_synced_post_time}")
+        print(f"Starting bot. Will only sync posts created after the specified time.")
     else:
         print(f"Starting bot. Will check for new posts and filter out already synced ones.")
 
     while True:
         try:
-            print(f"Checking for new posts from user {MASTODON_USER_ID}...")
+            if DEBUG:
+                print(f"Checking for new posts from user {MASTODON_USER_ID}...")
             
             # Fetch new posts from the user
             # We only want original posts, not boosts/replies
@@ -188,17 +191,18 @@ async def main(last_synced_post_time=None, run_once=False):
                 for post in reversed(new_posts):
                     post_id = post.id
                     post_date = post.created_at
-                    print(f"Processing post {post_id} created at {post_date}...")
-                    if last_synced_post_time:
-                        print(f"Checking against last synced post time: {last_synced_post_time}")
+                    if DEBUG:
+                        print(f"Processing post {post_id} created at {post_date}...")
                     
                     # Check if post was created after the specified time
                     if last_synced_post_time and post_date <= last_synced_post_time:
-                        print(f"Post {post_id} was created before the specified time . Skipping.")
+                        if DEBUG:
+                            print(f"Post {post_id} was created before the specified time. Skipping.")
                         continue
                     
                     if not is_post_synced(post_id):
-                        print(f"Found new post: {post_id}")
+                        if DEBUG:
+                            print(f"Found new post: {post_id}")
                         
                         # Format the message for Telegram
                         # Clean the HTML content to be compatible with Telegram
@@ -214,13 +218,15 @@ async def main(last_synced_post_time=None, run_once=False):
 
                         # Insert the post ID into the database after successful sending
                         insert_synced_post_id(post_id)
-                        print(f"Sent post {post_id} to all Telegram channels and recorded in DB.")
+                        if DEBUG:
+                            print(f"Sent post {post_id} to all Telegram channels and recorded in DB.")
                         
                         # Update the latest post time for GitHub Actions
                         if not latest_post_time or post_date > latest_post_time:
                             latest_post_time = post_date
                     else:
-                        print(f"Post {post_id} already synced. Skipping.")
+                        if DEBUG:
+                            print(f"Post {post_id} already synced. Skipping.")
 
             else:
                 print("No new posts found.")
@@ -234,9 +240,11 @@ async def main(last_synced_post_time=None, run_once=False):
             if latest_post_time:
                 # Round up to the next second to ensure we don't miss posts
                 rounded_time = latest_post_time.replace(microsecond=0) + timedelta(seconds=1)
-                print(f"LAST_SYNCED_POST_TIME={rounded_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                if DEBUG:
+                    print(f"LAST_SYNCED_POST_TIME={rounded_time.strftime('%Y-%m-%d %H:%M:%S')}")
             else:
-                print(f"LAST_SYNCED_POST_TIME={last_synced_post_time.strftime('%Y-%m-%d %H:%M:%S') if last_synced_post_time else '2000-01-01 12:00:00'}")
+                if DEBUG:
+                    print(f"LAST_SYNCED_POST_TIME={last_synced_post_time.strftime('%Y-%m-%d %H:%M:%S') if last_synced_post_time else '2000-01-01 12:00:00'}")
             break
 
         print(f"Sleeping for {POLLING_INTERVAL} seconds...")
