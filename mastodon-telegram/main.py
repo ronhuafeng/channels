@@ -239,7 +239,7 @@ async def main(last_synced_post_time=None, run_once=False):
             # Output the latest post time for GitHub Actions
             if latest_post_time:
                 # Round up to the next second to ensure we don't miss posts
-                rounded_time = latest_post_time.replace(microsecond=0) + timedelta(seconds=1)
+                rounded_time = latest_post_time.replace(microsecond=1) + timedelta(seconds=1)
                 if DEBUG:
                     print(f"LAST_SYNCED_POST_TIME={rounded_time.strftime('%Y-%m-%d %H:%M:%S')}")
             else:
