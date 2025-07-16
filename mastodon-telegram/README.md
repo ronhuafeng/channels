@@ -40,6 +40,7 @@ This application bridges posts from a Mastodon account to Telegram channels.
    - Read the last sync time from the `LAST_UPDATED` secret
    - Sync new posts from that time
    - Update the `LAST_UPDATED` secret with the timestamp of the latest synced post
+   - Clean up previous workflow runs (keeps only the 2 most recent runs to save storage)
 
 ## Command Line Arguments
 
@@ -55,3 +56,9 @@ This application bridges posts from a Mastodon account to Telegram channels.
 5. It records the post IDs in the database to prevent re-sending
 
 In GitHub Actions mode, the database is temporary and gets destroyed after each run, but the `LAST_UPDATED` secret maintains the sync state between runs.
+
+## GitHub Actions Cleanup
+
+To save repository storage, the application automatically deletes old workflow runs after each successful execution. By default, it keeps the 2 most recent runs. You can adjust this by modifying the `keep_count` parameter in the `delete_previous_workflow_runs()` function call in `main.py`.
+
+**Note:** This feature requires the `GITHUB_TOKEN` secret to be available, which is automatically provided by GitHub Actions.

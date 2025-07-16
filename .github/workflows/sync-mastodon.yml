@@ -9,6 +9,9 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write  # Required to delete workflow runs
+      contents: read  # Required to checkout code
     
     steps:
     - name: Checkout code
@@ -36,6 +39,8 @@ jobs:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHANNEL_IDS: ${{ secrets.TELEGRAM_CHANNEL_IDS }}
         POLLING_INTERVAL: 60 # Run once in GitHub Actions
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
       run: |
         LAST_UPDATED="${{ secrets.LAST_UPDATED }}"
         if [ -z "$LAST_UPDATED" ]; then

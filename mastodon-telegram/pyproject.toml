@@ -8,4 +8,5 @@ dependencies = [
     "dotenv>=0.9.9",
     "mastodon-py>=2.0.1",
     "python-telegram-bot>=22.2",
+    "requests>=2.31.0",
 ]

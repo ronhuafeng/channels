@@ -9,6 +9,7 @@ import sqlite3
 import asyncio
 import re
 import argparse
+import requests
 from datetime import datetime, timezone, timedelta
 from mastodon import Mastodon
 from mastodon.types_base import PaginatableList
@@ -35,6 +36,72 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_NAME = os.getenv('DATABASE_NAME', os.path.join(SCRIPT_DIR, 'synced_posts.db'))
 
 DEBUG= os.getenv('DEBUG', 'false').lower() in ('true', '1', 'yes')
+
+# GitHub Actions cleanup configuration
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+GITHUB_REPOSITORY = os.getenv('GITHUB_REPOSITORY')  # format: owner/repo
+
+def delete_previous_workflow_runs(keep_count=3):
+    """Delete previous workflow runs to keep only the most recent ones.
+    
+    Args:
+        keep_count (int): Number of recent runs to keep (default: 2)
+    """
+    if not all([GITHUB_TOKEN, GITHUB_REPOSITORY]):
+        print("GitHub cleanup skipped: Missing required environment variables")
+        return
+    
+    try:
+        # Get all workflow runs for the sync workflow
+        headers = {
+            'Authorization': f'token {GITHUB_TOKEN}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
+        # Get workflow ID first
+        workflows_url = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/actions/workflows"
+        response = requests.get(workflows_url, headers=headers)
+        response.raise_for_status()
+        
+        workflows = response.json()
+        sync_workflow_id = None
+        
+        for workflow in workflows['workflows']:
+            if workflow['name'] == 'Sync Mastodon to Telegram':
+                sync_workflow_id = workflow['id']
+                break
+        
+        if not sync_workflow_id:
+            print("Sync workflow not found")
+            return
+        
+        # Get all runs for this workflow
+        runs_url = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/actions/workflows/{sync_workflow_id}/runs"
+        response = requests.get(runs_url, headers=headers)
+        response.raise_for_status()
+        
+        runs = response.json()
+        
+        # Sort runs by creation time (newest first)
+        sorted_runs = sorted(runs['workflow_runs'], key=lambda x: x['created_at'], reverse=True)
+        
+        # Delete all runs except the most recent keep_count
+        deleted_count = 0
+        for run in sorted_runs[keep_count:]:
+            if run['status'] == 'completed':
+                delete_url = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/actions/runs/{run['id']}"
+                delete_response = requests.delete(delete_url, headers=headers)
+                
+                if delete_response.status_code == 204:
+                    deleted_count += 1
+                    print(f"Deleted workflow run {run['id']}")
+                else:
+                    print(f"Failed to delete workflow run {run['id']}: {delete_response.status_code}")
+        
+        print(f"Deleted {deleted_count} previous workflow runs, keeping {min(keep_count, len(sorted_runs))} most recent")
+        
+    except Exception as e:
+        print(f"Error deleting previous workflow runs: {e}")
 
 # Validate required environment variables
 def validate_config():
@@ -245,6 +312,9 @@ async def main(last_synced_post_time=None, run_once=False):
             else:
                 
                 print(f"LAST_SYNCED_POST_TIME={last_synced_post_time.strftime('%Y-%m-%d %H:%M:%S') if last_synced_post_time else '2000-01-01 12:00:00'}")
+            
+            # Clean up previous workflow runs (keep only the most recent 2)
+            delete_previous_workflow_runs(keep_count=3)
             break
 
         print(f"Sleeping for {POLLING_INTERVAL} seconds...")
