@@ -240,11 +240,11 @@ async def main(last_synced_post_time=None, run_once=False):
             if latest_post_time:
                 # Round up to the next second to ensure we don't miss posts
                 rounded_time = latest_post_time.replace(microsecond=1) + timedelta(seconds=1)
-                if DEBUG:
-                    print(f"LAST_SYNCED_POST_TIME={rounded_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                print(f"LAST_SYNCED_POST_TIME={rounded_time.strftime('%Y-%m-%d %H:%M:%S')}")
             else:
-                if DEBUG:
-                    print(f"LAST_SYNCED_POST_TIME={last_synced_post_time.strftime('%Y-%m-%d %H:%M:%S') if last_synced_post_time else '2000-01-01 12:00:00'}")
+                
+                print(f"LAST_SYNCED_POST_TIME={last_synced_post_time.strftime('%Y-%m-%d %H:%M:%S') if last_synced_post_time else '2000-01-01 12:00:00'}")
             break
 
         print(f"Sleeping for {POLLING_INTERVAL} seconds...")
